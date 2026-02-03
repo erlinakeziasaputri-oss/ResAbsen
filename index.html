@@ -31,6 +31,9 @@
     <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+    <!-- 4. LIBRARY HTML2PDF (Untuk Download PDF Berwarna) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
     <!-- Fallback Offline Scripts -->
     <script>if(typeof React==='undefined'){document.write('<script src="react.js"><\/script>')}</script>
     <script>if(typeof ReactDOM==='undefined'){document.write('<script src="react-dom.js"><\/script>')}</script>
@@ -64,7 +67,7 @@
         }
         const db = firebase.firestore();
         
-        // Aktifkan Offline Persistence
+        // Aktifkan Offline Persistence (Agar bisa scan saat internet mati, sync saat hidup)
         db.enablePersistence({ synchronizeTabs: true }).catch(err => console.log("Persistence error:", err.code));
 
         const { useState, useEffect, useRef } = React;
@@ -140,14 +143,14 @@
             const [view, setView] = useState('login');
             const [user, setUser] = useState(null);
             
-            // STATE DATA (Disinkronkan dengan Firebase)
+            // STATE DATA
             const [members, setMembers] = useState([]);
             const [admins, setAdmins] = useState([]);
             const [appConfig, setAppConfig] = useState({ appName: 'Absensi Pramuka', logoUrl: null });
             const [picketSchedule, setPSchedule] = useState({'Senin':[],'Selasa':[],'Rabu':[],'Kamis':[],'Jumat':[],'Sabtu':[]});
             const [picketAtt, setPAtt] = useState({});
             const [eskulAtt, setEAtt] = useState({});
-            const [holidays, setHolidays] = useState([]); // Daftar tanggal libur ['YYYY-MM-DD']
+            const [holidays, setHolidays] = useState([]); 
             
             const [loading, setLoading] = useState(true);
             const [notif, setNotif] = useState(null);
@@ -160,15 +163,11 @@
             // --- FIREBASE LISTENERS ---
             useEffect(() => {
                 const unsubs = [];
-
-                // 1. Members
                 unsubs.push(db.collection('members').onSnapshot(snap => {
                     const list = [];
                     snap.forEach(doc => list.push({ ...doc.data(), id: doc.id }));
                     setMembers(list);
                 }));
-
-                // 2. Admins
                 unsubs.push(db.collection('admins').onSnapshot(snap => {
                     const list = [];
                     snap.forEach(doc => list.push({ ...doc.data(), id: doc.id }));
@@ -178,37 +177,29 @@
                         setAdmins(list);
                     }
                 }));
-
-                // 3. Settings (Config, Schedule, Holidays)
                 unsubs.push(db.collection('settings').doc('config').onSnapshot(doc => {
                     if (doc.exists) setAppConfig(doc.data());
                     else db.collection('settings').doc('config').set({ appName: 'Absensi Pramuka', logoUrl: null });
                 }));
-
                 unsubs.push(db.collection('settings').doc('piket_schedule').onSnapshot(doc => {
                     if (doc.exists) setPSchedule(doc.data());
                     else db.collection('settings').doc('piket_schedule').set({'Senin':[],'Selasa':[],'Rabu':[],'Kamis':[],'Jumat':[],'Sabtu':[]});
                 }));
-
                 unsubs.push(db.collection('settings').doc('holidays').onSnapshot(doc => {
                     if (doc.exists) setHolidays(doc.data().dates || []);
                     else db.collection('settings').doc('holidays').set({ dates: [] });
                 }));
-
-                // 4. Attendance
                 unsubs.push(db.collection('attendance_piket').onSnapshot(snap => {
                     const data = {};
                     snap.forEach(doc => { data[doc.id] = doc.data().list || [] });
                     setPAtt(data);
                 }));
-
                 unsubs.push(db.collection('attendance_eskul').onSnapshot(snap => {
                     const data = {};
                     snap.forEach(doc => { data[doc.id] = doc.data().list || [] });
                     setEAtt(data);
                     setLoading(false);
                 }));
-
                 return () => unsubs.forEach(u => u());
             }, []);
 
@@ -537,6 +528,7 @@
             const [sel, setSel] = useState([]);
             const [rDate, setRDate] = useState(new Date());
             const [rCls, setRCls] = useState('');
+            const reportRef = useRef();
 
             const scan = async (e) => {
                 e.preventDefault();
@@ -567,6 +559,18 @@
             const removeFromSch = async (d, id) => {
                 await db.collection('settings').doc('piket_schedule').update({ [d]: schedule[d].filter(x=>x!==id) });
             }
+
+            const downloadPDF = () => {
+                const element = reportRef.current;
+                const opt = {
+                    margin: 0.2,
+                    filename: `Laporan_Piket_${formatDate(rDate)}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
+                };
+                html2pdf().from(element).save();
+            };
 
             return (
                 <div className="bg-white h-full flex flex-col rounded-xl shadow-lg overflow-hidden animate-fade-in">
@@ -604,10 +608,11 @@
                                     </div>
                                     <div className="flex gap-2">
                                         <select className="border rounded px-3 py-2 bg-white text-sm" value={rCls} onChange={e=>setRCls(e.target.value)}><option value="">Semua Kelas</option>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                                        <button onClick={()=>window.print()} className="bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-slate-800 shadow"><SimpleIcon name="Download" size={16}/> PDF</button>
+                                        <button onClick={downloadPDF} className="bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-slate-800 shadow"><SimpleIcon name="Download" size={16}/> PDF</button>
                                     </div>
                                 </div>
-                                <div className="overflow-x-auto border rounded-lg shadow-sm">
+                                <div ref={reportRef} className="overflow-x-auto border rounded-lg shadow-sm bg-white p-2">
+                                    <div className="text-center mb-4 font-bold text-lg hidden print:block">Laporan Absensi Piket Mingguan</div>
                                     <table className="w-full text-center border-collapse text-sm">
                                         <thead className="bg-slate-800 text-white">
                                             <tr>
@@ -621,12 +626,13 @@
                                                                 <div className="text-xs font-light opacity-75">{['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][i]}</div>
                                                                 <div className="font-semibold">{d.getDate()}/{d.getMonth()+1}</div>
                                                                 <button 
+                                                                    data-html2canvas-ignore="true"
                                                                     onClick={()=>toggleHoliday(dStr)} 
                                                                     className={`no-print text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 transition ${isHol ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'border-slate-500 text-slate-300 hover:bg-slate-700 hover:text-white'}`}
                                                                 >
                                                                     {isHol ? 'LIBUR' : 'Set Libur'}
                                                                 </button>
-                                                                {isHol && <div className="hidden print:block text-[10px] bg-red-600 px-1 rounded mt-1">LIBUR</div>}
+                                                                {isHol && <div className="text-[10px] bg-red-600 px-1 rounded mt-1">LIBUR</div>}
                                                             </div>
                                                         </th>
                                                     )
@@ -715,9 +721,9 @@
             const [gender, setGender] = useState('');
             const [gy, setGY] = useState(new Date().getFullYear());
             const [gms, setGMS] = useState([new Date().getMonth()]);
-            
-            // Dispensasi State
             const [dispSearch, setDispSearch] = useState('');
+            const reportRef = useRef();
+            const gradeRef = useRef();
 
             const sats = getSaturdays(date.getFullYear(), date.getMonth());
             const scan = async (e) => {
@@ -771,7 +777,25 @@
                 return td===0 ? 'A' : (ta/td)>0.7 ? 'A' : 'B';
             }
 
-            const printPDF = (g) => { setGender(g); setTimeout(()=>{window.print(); setGender('')}, 500); }
+            const downloadPDF = (ref, filename) => {
+                const element = ref.current;
+                const opt = {
+                    margin: 0.2,
+                    filename: filename,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
+                };
+                html2pdf().from(element).save();
+            };
+
+            const printPDF = (g) => { 
+                setGender(g); 
+                setTimeout(() => { 
+                    downloadPDF(gradeRef, `Daftar_Nilai_${g||'Semua'}.pdf`);
+                    setGender(''); 
+                }, 500); 
+            }
 
             return (
                 <div className="bg-white h-full flex flex-col rounded-xl shadow-lg overflow-hidden animate-fade-in">
@@ -837,10 +861,11 @@
                                     </div>
                                     <div className="flex gap-2">
                                         <select className="border rounded px-3 py-2 bg-white text-sm" value={cls} onChange={e=>setCls(e.target.value)}><option value="">Semua Kelas</option>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                                        <button onClick={()=>window.print()} className="bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-slate-800 shadow"><SimpleIcon name="Download" size={16}/> PDF</button>
+                                        <button onClick={()=>downloadPDF(reportRef, `Laporan_Eskul_${MONTH_NAMES[date.getMonth()]}.pdf`)} className="bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-slate-800 shadow"><SimpleIcon name="Download" size={16}/> PDF</button>
                                     </div>
                                 </div>
-                                <div className="overflow-x-auto border rounded-lg shadow-sm">
+                                <div ref={reportRef} className="overflow-x-auto border rounded-lg shadow-sm bg-white p-2">
+                                    <div className="text-center mb-4 font-bold text-lg hidden print:block">Laporan Absensi Ekskul - {MONTH_NAMES[date.getMonth()]} {date.getFullYear()}</div>
                                     <table className="w-full text-left border-collapse text-sm">
                                         <thead className="bg-green-700 text-white">
                                             <tr>
@@ -856,12 +881,13 @@
                                                                 <div className="text-xs font-light">Sabtu</div>
                                                                 <div className="font-semibold">{d.getDate()}/{d.getMonth()+1}</div>
                                                                 <button 
+                                                                    data-html2canvas-ignore="true"
                                                                     onClick={()=>toggleHoliday(dStr)} 
                                                                     className={`no-print text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 transition ${isHol ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'border-green-400 text-green-100 hover:bg-green-800 hover:text-white'}`}
                                                                 >
                                                                     {isHol ? 'LIBUR' : 'Set Libur'}
                                                                 </button>
-                                                                {isHol && <div className="hidden print:block text-[10px] bg-red-600 px-1 rounded mt-1">LIBUR</div>}
+                                                                {isHol && <div className="text-[10px] bg-red-600 px-1 rounded mt-1">LIBUR</div>}
                                                             </div>
                                                         </th>
                                                     )
@@ -897,9 +923,11 @@
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><div className="text-xs font-bold text-slate-500 uppercase mb-2">Bulan Penilaian:</div><div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">{MONTH_NAMES.map((n,i)=>{const s=gms.includes(i); return <button key={i} onClick={()=>setGMS(s?gms.filter(x=>x!==i):[...gms,i].sort((a,b)=>a-b))} className={`text-sm px-3 py-2 rounded-lg border flex items-center justify-center gap-2 transition ${s?'bg-green-100 border-green-500 text-green-800 font-semibold shadow-sm':'bg-white text-slate-500 hover:bg-white hover:border-slate-300'}`}>{s?<SimpleIcon name="CheckSquare" size={16}/>:<SimpleIcon name="Square" size={16}/>} {n}</button>})}</div></div>
                                     <div className="flex flex-wrap justify-between items-center gap-4"><select className="border rounded px-3 py-2 bg-white text-sm" value={cls} onChange={e=>setCls(e.target.value)}><option value="">Semua Kelas</option>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select><div className="flex gap-2"><button className="bg-slate-700 text-white px-3 py-2 rounded text-sm hover:bg-slate-800 shadow" onClick={()=>printPDF('')}>Semua</button><button className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 shadow" onClick={()=>printPDF('L')}>Putra</button><button className="bg-pink-600 text-white px-3 py-2 rounded text-sm hover:bg-pink-700 shadow" onClick={()=>printPDF('P')}>Putri</button></div></div>
                                 </div>
-                                <div className="text-center mb-6"><h2 className="text-xl font-bold border-b-2 border-green-500 inline-block pb-1 px-4">PERIODE: {gms.map(i=>MONTH_NAMES[i]).join(', ')} {gy}</h2></div>
-                                <div className="overflow-x-auto rounded-lg border shadow-sm"><table className="w-full text-left border-collapse"><thead className="bg-slate-800 text-white"><tr><th className="p-3 text-center w-16">No</th><th className="p-3">Nama Lengkap</th><th className="p-3 text-center w-24">Kelas</th><th className="p-3 text-center w-24">L/P</th><th className="p-3 text-center w-24">Nilai</th></tr></thead><tbody className="bg-white divide-y divide-slate-100">{getRep().map((m,i)=>{const g=getGrd(m.id); return <tr key={m.id} className="hover:bg-slate-50"><td className="p-3 text-center font-mono text-slate-500">{i+1}</td><td className="p-3 font-medium">{m.name}</td><td className="p-3 text-center">{m.class}</td><td className="p-3 text-center">{m.gender}</td><td className={`p-3 text-center font-bold text-lg ${g==='A'?'text-green-600':g==='B'?'text-orange-500':'text-slate-300'}`}>{g}</td></tr>})}</tbody></table></div>
-                                <div className="mt-4 text-xs text-slate-500 italic text-center no-print">* Nilai A: Kehadiran > 70% | Nilai B: Kehadiran ≤ 70% (Hari Libur tidak dihitung)</div>
+                                <div ref={gradeRef} className="overflow-x-auto rounded-lg border shadow-sm bg-white p-2">
+                                    <div className="text-center mb-6"><h2 className="text-xl font-bold border-b-2 border-green-500 inline-block pb-1 px-4">PERIODE: {gms.map(i=>MONTH_NAMES[i]).join(', ')} {gy}</h2></div>
+                                    <table className="w-full text-left border-collapse"><thead className="bg-slate-800 text-white"><tr><th className="p-3 text-center w-16">No</th><th className="p-3">Nama Lengkap</th><th className="p-3 text-center w-24">Kelas</th><th className="p-3 text-center w-24">L/P</th><th className="p-3 text-center w-24">Nilai</th></tr></thead><tbody className="bg-white divide-y divide-slate-100">{getRep().map((m,i)=>{const g=getGrd(m.id); return <tr key={m.id} className="hover:bg-slate-50"><td className="p-3 text-center font-mono text-slate-500">{i+1}</td><td className="p-3 font-medium">{m.name}</td><td className="p-3 text-center">{m.class}</td><td className="p-3 text-center">{m.gender}</td><td className={`p-3 text-center font-bold text-lg ${g==='A'?'text-green-600':g==='B'?'text-orange-500':'text-slate-300'}`}>{g}</td></tr>})}</tbody></table>
+                                    <div className="mt-4 text-xs text-slate-500 italic text-center no-print">* Nilai A: Kehadiran > 70% | Nilai B: Kehadiran ≤ 70% (Hari Libur tidak dihitung)</div>
+                                </div>
                             </div>
                         )}
                     </div>
