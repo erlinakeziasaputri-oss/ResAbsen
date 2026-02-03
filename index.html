@@ -586,10 +586,18 @@
                                                     const dStr = formatDate(d);
                                                     const isHol = holidays.includes(dStr);
                                                     return (
-                                                        <th key={i} className={`p-3 border relative group cursor-pointer ${isHol ? 'bg-red-800' : ''}`} onClick={()=>toggleHoliday(dStr)} title="Klik untuk set libur">
-                                                            <div className="text-xs font-light opacity-75">{['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][i]}</div>
-                                                            <div>{d.getDate()}/{d.getMonth()+1}</div>
-                                                            {isHol && <div className="text-[10px] bg-red-600 px-1 rounded mt-1">LIBUR</div>}
+                                                        <th key={i} className={`p-3 border min-w-[80px] ${isHol ? 'bg-red-800' : ''}`}>
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <div className="text-xs font-light opacity-75">{['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][i]}</div>
+                                                                <div className="font-semibold">{d.getDate()}/{d.getMonth()+1}</div>
+                                                                <button 
+                                                                    onClick={()=>toggleHoliday(dStr)} 
+                                                                    className={`no-print text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 transition ${isHol ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'border-slate-500 text-slate-300 hover:bg-slate-700 hover:text-white'}`}
+                                                                >
+                                                                    {isHol ? 'LIBUR' : 'Set Libur'}
+                                                                </button>
+                                                                {isHol && <div className="hidden print:block text-[10px] bg-red-600 px-1 rounded mt-1">LIBUR</div>}
+                                                            </div>
                                                         </th>
                                                     )
                                                 })}
@@ -813,10 +821,18 @@
                                                     const dStr = formatDate(d);
                                                     const isHol = holidays.includes(dStr);
                                                     return (
-                                                        <th key={d} className={`p-3 border text-center cursor-pointer hover:bg-green-800 transition relative ${isHol?'bg-red-800':''}`} onClick={()=>toggleHoliday(dStr)} title="Klik untuk set libur">
-                                                            <div className="text-xs font-light">Sabtu</div>
-                                                            <div>{d.getDate()}/{d.getMonth()+1}</div>
-                                                            {isHol && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] px-1">LIBUR</div>}
+                                                        <th key={d} className={`p-3 border text-center min-w-[80px] ${isHol ? 'bg-red-800' : ''}`}>
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <div className="text-xs font-light">Sabtu</div>
+                                                                <div className="font-semibold">{d.getDate()}/{d.getMonth()+1}</div>
+                                                                <button 
+                                                                    onClick={()=>toggleHoliday(dStr)} 
+                                                                    className={`no-print text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 transition ${isHol ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'border-green-400 text-green-100 hover:bg-green-800 hover:text-white'}`}
+                                                                >
+                                                                    {isHol ? 'LIBUR' : 'Set Libur'}
+                                                                </button>
+                                                                {isHol && <div className="hidden print:block text-[10px] bg-red-600 px-1 rounded mt-1">LIBUR</div>}
+                                                            </div>
                                                         </th>
                                                     )
                                                 })}
