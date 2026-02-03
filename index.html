@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi Pramuka</title>
+    
+    <!-- 1. STYLE & CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; }
+            .shadow-lg, .shadow-xl, .shadow-md { box-shadow: none !important; }
+            .border { border: 1px solid #ddd !important; }
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+
+    <!-- 2. LIBRARY FIREBASE (Database) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <!-- 3. LIBRARY REACT & BABEL -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Fallback Offline Scripts -->
+    <script>if(typeof React==='undefined'){document.write('<script src="react.js"><\/script>')}</script>
+    <script>if(typeof ReactDOM==='undefined'){document.write('<script src="react-dom.js"><\/script>')}</script>
+    <script>if(typeof Babel==='undefined'){document.write('<script src="babel.js"><\/script>')}</script>
+</head>
+<body class="bg-gray-100 font-sans text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <div id="root" class="h-full w-full">
+        <!-- Loading State -->
+        <div class="h-full flex flex-col items-center justify-center text-slate-500 bg-slate-50">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+            <h2 class="text-xl font-semibold">Menghubungkan Database...</h2>
+        </div>
+    </div>
+
+    <!-- MAIN APP SCRIPT -->
+    <script type="text/babel">
+        // --- KONFIGURASI FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCFPT6ae2V7a8CrzPFScJjzIhjXbE6OqJQ",
+            authDomain: "absenrespati.firebaseapp.com",
+            projectId: "absenrespati",
+            storageBucket: "absenrespati.firebasestorage.app",
+            messagingSenderId: "220805294822",
+            appId: "1:220805294822:web:971883a987d05d5c99a927"
+        };
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+        
+        // Aktifkan Offline Persistence (Agar bisa scan saat internet mati, sync saat hidup)
+        db.enablePersistence({ synchronizeTabs: true }).catch(err => console.log("Persistence error:", err.code));
+
+        const { useState, useEffect, useRef } = React;
+        const { createRoot } = ReactDOM;
+
+        // --- ICONS (SVG) ---
+        const Icon = ({ path, size = 20, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
+        );
+        const ICONS = {
+            Users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+            Calendar: <><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></>,
+            Settings: <><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.35a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>,
+            QrCode: <><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></>,
+            LogOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></>,
+            Plus: <><path d="M5 12h14"/><path d="M12 5v14"/></>,
+            Trash: <><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></>,
+            Edit: <><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></>,
+            Search: <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>,
+            Download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>,
+            Print: <><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></>,
+            ArrowLeft: <><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></>,
+            Check: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+            XCircle: <><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></>,
+            ChevronLeft: <><path d="m15 18-6-6 6-6"/></>,
+            ChevronRight: <><path d="m9 18 6-6-6-6"/></>,
+            Filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>,
+            FileText: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></>,
+            Lock: <><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+            CheckSquare: <><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>,
+            Square: <><rect width="18" height="18" x="3" y="3" rx="2"/></>
+        };
+        const SimpleIcon = ({ name, size = 20, className = "" }) => <Icon path={ICONS[name] || ICONS.Users} size={size} className={className} />;
+
+        // --- UTILS ---
+        const CLASSES = [];
+        ['7', '8', '9'].forEach(l => ['A','B','C','D','E','F','G','H','I'].forEach(s => CLASSES.push(l+s)));
+        const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        
+        const generateBarcode = () => {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let r = ''; for(let i=0;i<4;i++) r+=chars.charAt(Math.floor(Math.random()*chars.length));
+            return r;
+        };
+        const formatDate = (d) => d.toISOString().split('T')[0];
+        const formatDateID = (d) => new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(d);
+        const getSaturdays = (y, m) => {
+            let d = new Date(y, m, 1), sats = [];
+            while(d.getMonth() === m) {
+                if(d.getDay() === 6) sats.push(new Date(d));
+                d.setDate(d.getDate() + 1);
+            }
+            return sats;
+        };
+        const getMonday = (d) => {
+            d = new Date(d);
+            const day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        };
+        const sortMembers = (m) => [...m].sort((a,b) => {
+            if(parseInt(a.class) !== parseInt(b.class)) return parseInt(a.class) - parseInt(b.class);
+            if(a.class !== b.class) return a.class.localeCompare(b.class);
+            return a.name.localeCompare(b.name);
+        });
+
+        // --- APP COMPONENT ---
+        function App() {
+            const [view, setView] = useState('login');
+            const [user, setUser] = useState(null);
+            
+            // STATE DATA (Disinkronkan dengan Firebase)
+            const [members, setMembers] = useState([]);
+            const [admins, setAdmins] = useState([]);
+            const [appConfig, setAppConfig] = useState({ appName: 'Absensi Pramuka', logoUrl: null });
+            const [picketSchedule, setPSchedule] = useState({'Senin':[],'Selasa':[],'Rabu':[],'Kamis':[],'Jumat':[],'Sabtu':[]});
+            const [picketAtt, setPAtt] = useState({});
+            const [eskulAtt, setEAtt] = useState({});
+            
+            const [loading, setLoading] = useState(true);
+            const [notif, setNotif] = useState(null);
+
+            const showNotif = (msg, type='success') => {
+                setNotif({ msg, type });
+                setTimeout(() => setNotif(null), 3000);
+            }
+
+            // --- FIREBASE LISTENERS ---
+            useEffect(() => {
+                const unsubs = [];
+
+                // 1. Members
+                unsubs.push(db.collection('members').onSnapshot(snap => {
+                    const list = [];
+                    snap.forEach(doc => list.push({ ...doc.data(), id: doc.id }));
+                    setMembers(list);
+                }));
+
+                // 2. Admins
+                unsubs.push(db.collection('admins').onSnapshot(snap => {
+                    const list = [];
+                    snap.forEach(doc => list.push({ ...doc.data(), id: doc.id }));
+                    if (list.length === 0) {
+                        // Default Admin jika kosong
+                        db.collection('admins').add({ username: 'admin', password: 'kuncensekre' });
+                    } else {
+                        setAdmins(list);
+                    }
+                }));
+
+                // 3. Settings (Config & Schedule)
+                unsubs.push(db.collection('settings').doc('config').onSnapshot(doc => {
+                    if (doc.exists) setAppConfig(doc.data());
+                    else db.collection('settings').doc('config').set({ appName: 'Absensi Pramuka', logoUrl: null });
+                }));
+
+                unsubs.push(db.collection('settings').doc('piket_schedule').onSnapshot(doc => {
+                    if (doc.exists) setPSchedule(doc.data());
+                    else db.collection('settings').doc('piket_schedule').set({'Senin':[],'Selasa':[],'Rabu':[],'Kamis':[],'Jumat':[],'Sabtu':[]});
+                }));
+
+                // 4. Attendance
+                unsubs.push(db.collection('attendance_piket').onSnapshot(snap => {
+                    const data = {};
+                    snap.forEach(doc => { data[doc.id] = doc.data().list || [] });
+                    setPAtt(data);
+                }));
+
+                unsubs.push(db.collection('attendance_eskul').onSnapshot(snap => {
+                    const data = {};
+                    snap.forEach(doc => { data[doc.id] = doc.data().list || [] });
+                    setEAtt(data);
+                    setLoading(false);
+                }));
+
+                return () => unsubs.forEach(u => u());
+            }, []);
+
+            if (loading) return (
+                <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-slate-50">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+                    <h2 className="text-xl font-semibold">Memuat Data...</h2>
+                </div>
+            );
+
+            if(view === 'login') return <LoginScreen onLogin={(u,p) => {
+                const acc = admins.find(a => a.username === u && a.password === p);
+                if(acc) { setUser(acc); setView('dashboard'); }
+                else showNotif('Username/Password Salah!', 'error');
+            }} conf={appConfig} notif={notif} />;
+
+            return (
+                <div className="h-full flex flex-col bg-slate-50">
+                    <header className="bg-slate-800 text-white p-4 shadow-md flex justify-between items-center no-print z-10">
+                        <div className="flex items-center gap-3">
+                            {appConfig.logoUrl ? <img src={appConfig.logoUrl} className="w-10 h-10 object-contain rounded bg-white"/> : <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center text-white"><SimpleIcon name="Users" size={20}/></div>}
+                            <h1 className="text-xl font-bold hidden sm:block tracking-wide">{appConfig.appName}</h1>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <span className="hidden sm:inline text-slate-300">Halo, <b className="text-orange-400">{user?.username}</b></span>
+                            <button onClick={() => setView('login')} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm font-medium transition shadow-sm"><SimpleIcon name="LogOut" size={16}/> Keluar</button>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 overflow-auto p-6 relative">
+                        {notif && (
+                            <div className={`fixed top-20 right-6 px-6 py-4 rounded-lg shadow-xl z-50 text-white animate-fade-in flex items-center gap-3 ${notif.type==='error'?'bg-red-500':'bg-green-600'}`}>
+                                <SimpleIcon name={notif.type==='error'?'XCircle':'Check'} size={24} />
+                                <span className="font-medium">{notif.msg}</span>
+                            </div>
+                        )}
+
+                        {view === 'dashboard' && <Dashboard setView={setView} />}
+                        {view === 'anggota' && <MemberManager members={members} setView={setView} showNotif={showNotif} />}
+                        {view === 'settings' && <SettingsPage admins={admins} conf={appConfig} setView={setView} showNotif={showNotif} />}
+                        {view === 'piket' && <PiketSystem members={members} schedule={picketSchedule} att={picketAtt} setView={setView} showNotif={showNotif} />}
+                        {view === 'eskul' && <EskulSystem members={members} att={eskulAtt} setView={setView} showNotif={showNotif} />}
+                    </main>
+                </div>
+            );
+        }
+
+        // --- COMPONENTS ---
+
+        function LoginScreen({ onLogin, conf, notif }) {
+            const [u, setU] = useState('');
+            const [p, setP] = useState('');
+            return (
+                <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                    <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md animate-fade-in">
+                        <div className="flex flex-col items-center mb-8">
+                             {conf.logoUrl ? <img src={conf.logoUrl} className="w-24 h-24 object-contain mb-4"/> : <div className="w-20 h-20 bg-orange-600 rounded-full flex items-center justify-center mb-4 text-white shadow-lg"><SimpleIcon name="Users" size={40}/></div>}
+                            <h2 className="text-2xl font-bold text-slate-800">{conf.appName}</h2>
+                            <p className="text-slate-500 text-sm mt-1">Silakan login untuk melanjutkan</p>
+                        </div>
+                        {notif && <div className="bg-red-100 border border-red-200 text-red-700 px-4 py-2 rounded mb-4 text-sm text-center">{notif.msg}</div>}
+                        <form onSubmit={e => {e.preventDefault(); onLogin(u,p)}}>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                                <input className="w-full p-3 border border-slate-300 rounded focus:ring-2 focus:ring-orange-500 outline-none transition" value={u} onChange={e=>setU(e.target.value)} placeholder="admin" />
+                            </div>
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                                <input type="password" className="w-full p-3 border border-slate-300 rounded focus:ring-2 focus:ring-orange-500 outline-none transition" value={p} onChange={e=>setP(e.target.value)} placeholder="kuncensekre" />
+                            </div>
+                            <button className="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded font-bold transition shadow-md hover:shadow-lg">MASUK</button>
+                        </form>
+                    </div>
+                </div>
+            )
+        }
+
+        function Dashboard({ setView }) {
+            const menus = [
+                {id:'piket', label:'Absen Piket', icon:'Calendar', color:'bg-blue-600'},
+                {id:'eskul', label:'Absen Eskul', icon:'QrCode', color:'bg-green-600'},
+                {id:'anggota', label:'Data Anggota', icon:'Users', color:'bg-orange-600'},
+                {id:'settings', label:'Setting', icon:'Settings', color:'bg-slate-600'},
+            ];
+            return (
+                <div className="h-full flex flex-col items-center justify-center animate-fade-in">
+                    <h2 className="text-3xl font-bold text-slate-700 mb-10 tracking-tight">Menu Utama</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-5xl">
+                        {menus.map(m => (
+                            <button key={m.id} onClick={() => setView(m.id)} className={`${m.color} text-white p-8 rounded-xl shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex flex-col items-center gap-4 h-48 justify-center group`}>
+                                <div className="p-3 bg-white/20 rounded-full group-hover:bg-white/30 transition"><SimpleIcon name={m.icon} size={40} /></div>
+                                <span className="text-xl font-semibold">{m.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )
+        }
+
+        function MemberManager({ members, setView, showNotif }) {
+            const [search, setSearch] = useState('');
+            const [cls, setCls] = useState('');
+            const [modal, setModal] = useState(false);
+            const [edit, setEdit] = useState(null);
+            const [form, setForm] = useState({name:'', phone:'', class:'7A', gender:'L'});
+            const [promModal, setPromModal] = useState(false);
+            const [pin, setPin] = useState('');
+
+            const filtered = sortMembers(members.filter(m => 
+                (m.name.toLowerCase().includes(search.toLowerCase()) || m.id.includes(search)) &&
+                (cls ? m.class === cls : true)
+            ));
+
+            const save = async (e) => {
+                e.preventDefault();
+                if(edit) {
+                    await db.collection('members').doc(edit.id).update(form);
+                    showNotif('Anggota diperbarui');
+                } else {
+                    let newId = generateBarcode();
+                    while(members.find(m => m.id === newId)) newId = generateBarcode();
+                    await db.collection('members').doc(newId).set({...form, id: newId});
+                    showNotif('Anggota ditambahkan: ' + newId);
+                }
+                setModal(false); setEdit(null); setForm({name:'', phone:'', class:'7A', gender:'L'});
+            }
+
+            const downloadCard = async (m) => {
+                const canvas = document.createElement('canvas'); canvas.width = 400; canvas.height = 250;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = "white"; ctx.fillRect(0,0,400,250);
+                ctx.fillStyle = "#ea580c"; ctx.fillRect(0,0,400,50);
+                ctx.strokeStyle = "#334155"; ctx.lineWidth = 2; ctx.strokeRect(1,1,398,248);
+                ctx.fillStyle = "white"; ctx.font = "bold 22px Arial"; ctx.textAlign = "center"; ctx.fillText("KARTU PRAMUKA", 200, 32);
+                ctx.fillStyle = "black"; ctx.textAlign = "left"; ctx.font = "bold 18px Arial"; ctx.fillText(m.name, 20, 90);
+                ctx.font = "16px Arial"; ctx.fillText("Kelas: " + m.class, 20, 120); ctx.fillText("ID: " + m.id, 20, 145);
+                try {
+                    const img = new Image(); img.crossOrigin = "Anonymous";
+                    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${m.id}`;
+                    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+                    ctx.drawImage(img, 250, 80, 130, 130);
+                } catch (e) {
+                    ctx.fillStyle = "#ccc"; ctx.fillRect(250, 80, 130, 130);
+                    ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.font = "bold 20px Monospace";
+                    ctx.fillText(m.id, 315, 150); ctx.font = "10px Arial"; ctx.fillText("(Offline)", 315, 165);
+                }
+                const link = document.createElement('a'); link.download = `KARTU_${m.id}.png`; link.href = canvas.toDataURL(); link.click();
+            }
+
+            const confirmPromote = async (e) => {
+                e.preventDefault();
+                if(pin === '147258') {
+                    const batch = db.batch();
+                    members.forEach(m => {
+                        const lvl = parseInt(m.class[0]);
+                        if(lvl < 9) {
+                            const newClass = (lvl+1) + m.class.substring(1);
+                            batch.update(db.collection('members').doc(m.id), {class: newClass});
+                        } else {
+                            batch.delete(db.collection('members').doc(m.id));
+                        }
+                    });
+                    await batch.commit();
+                    showNotif('Kenaikan kelas berhasil!'); setPromModal(false); setPin('');
+                } else showNotif('PIN Salah', 'error');
+            }
+
+            const handleDelete = async (id) => {
+                if(confirm('Hapus?')) {
+                    await db.collection('members').doc(id).delete();
+                    showNotif('Anggota Dihapus', 'error');
+                }
+            }
+
+            return (
+                <div className="bg-white p-6 rounded-xl shadow-lg min-h-full animate-fade-in flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <button onClick={()=>setView('dashboard')} className="flex items-center text-slate-500 hover:text-slate-800 transition"><SimpleIcon name="ArrowLeft" className="mr-2"/> Kembali</button>
+                        <h2 className="text-2xl font-bold text-slate-800">Data Anggota</h2>
+                        <div className="flex gap-2">
+                            <button onClick={()=>setPromModal(true)} className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center gap-2 transition shadow"><SimpleIcon name="Check" size={18}/> Naik Kelas</button>
+                            <button onClick={()=>{setEdit(null); setModal(true)}} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2 transition shadow"><SimpleIcon name="Plus" size={18}/> Tambah</button>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 mb-6 bg-slate-50 p-4 rounded-lg border">
+                        <div className="flex items-center bg-white border rounded px-3 py-2 flex-1 shadow-sm">
+                            <SimpleIcon name="Search" className="text-slate-400 mr-2"/>
+                            <input className="outline-none w-full text-sm" placeholder="Cari nama atau ID..." value={search} onChange={e=>setSearch(e.target.value)} />
+                        </div>
+                        <select className="border rounded px-3 py-2 bg-white text-sm shadow-sm" value={cls} onChange={e=>setCls(e.target.value)}>
+                            <option value="">Semua Kelas</option>
+                            {CLASSES.map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border shadow-sm flex-1">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-100 text-slate-600 text-sm uppercase tracking-wider">
+                                    <th className="p-3 border-b font-bold">ID (Barcode)</th>
+                                    <th className="p-3 border-b font-bold">Nama Lengkap</th>
+                                    <th className="p-3 border-b font-bold">Kelas</th>
+                                    <th className="p-3 border-b font-bold">L/P</th>
+                                    <th className="p-3 border-b font-bold text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-100">
+                                {filtered.map(m => (
+                                    <tr key={m.id} className="hover:bg-slate-50 transition">
+                                        <td className="p-3 font-mono font-bold text-orange-600 flex items-center gap-2"><SimpleIcon name="QrCode" size={16} className="text-slate-400"/> {m.id}</td>
+                                        <td className="p-3">{m.name}</td>
+                                        <td className="p-3"><span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">{m.class}</span></td>
+                                        <td className="p-3">{m.gender}</td>
+                                        <td className="p-3 flex justify-center gap-2">
+                                            <button onClick={()=>downloadCard(m)} className="p-2 text-slate-600 hover:bg-slate-100 rounded transition" title="Kartu"><SimpleIcon name="Download" size={18}/></button>
+                                            <button onClick={()=>{setEdit(m); setForm(m); setModal(true)}} className="p-2 text-blue-600 hover:bg-blue-50 rounded transition" title="Edit"><SimpleIcon name="Edit" size={18}/></button>
+                                            <button onClick={()=>handleDelete(m.id)} className="p-2 text-red-600 hover:bg-red-50 rounded transition" title="Hapus"><SimpleIcon name="Trash" size={18}/></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {filtered.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400 italic">Tidak ada data ditemukan</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {modal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl animate-fade-in">
+                                <h3 className="text-xl font-bold mb-4 border-b pb-2">{edit ? 'Edit Anggota' : 'Tambah Anggota'}</h3>
+                                <form onSubmit={save} className="space-y-4">
+                                    <div><label className="block text-sm text-slate-600 mb-1">Nama Lengkap</label><input required className="w-full border p-2 rounded focus:ring-2 focus:ring-orange-500 outline-none" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} /></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="block text-sm text-slate-600 mb-1">Kelas</label><select className="w-full border p-2 rounded focus:ring-2 focus:ring-orange-500 outline-none" value={form.class} onChange={e=>setForm({...form, class:e.target.value})}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+                                        <div><label className="block text-sm text-slate-600 mb-1">Jenis Kelamin</label><select className="w-full border p-2 rounded focus:ring-2 focus:ring-orange-500 outline-none" value={form.gender} onChange={e=>setForm({...form, gender:e.target.value})}><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
+                                    </div>
+                                    <div><label className="block text-sm text-slate-600 mb-1">No Telpon</label><input className="w-full border p-2 rounded focus:ring-2 focus:ring-orange-500 outline-none" value={form.phone} onChange={e=>setForm({...form, phone:e.target.value})} /></div>
+                                    <div className="flex justify-end gap-3 pt-4">
+                                        <button type="button" onClick={()=>setModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Batal</button>
+                                        <button className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 shadow">Simpan</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {promModal && (
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl animate-fade-in text-center">
+                                <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4"><SimpleIcon name="Lock" size={24}/></div>
+                                <h3 className="text-lg font-bold mb-1">Konfirmasi Naik Kelas</h3>
+                                <p className="text-slate-500 text-sm mb-4">Masukkan PIN Keamanan (147258)</p>
+                                <form onSubmit={confirmPromote}>
+                                    <input type="password" autoFocus className="w-full text-center text-2xl tracking-[0.5em] p-3 border rounded mb-6 focus:ring-2 focus:ring-purple-500 outline-none" maxLength={6} value={pin} onChange={e=>setPin(e.target.value)} placeholder="••••••" />
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={()=>setPromModal(false)} className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded">Batal</button>
+                                        <button className="flex-1 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded font-bold shadow">Konfirmasi</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        function PiketSystem({ members, schedule, att, setView, showNotif }) {
+            const [tab, setTab] = useState('scan');
+            const [code, setCode] = useState('');
+            const [res, setRes] = useState(null);
+            const [sModal, setSModal] = useState(false);
+            const [day, setDay] = useState('');
+            const [sSearch, setSSearch] = useState('');
+            const [sel, setSel] = useState([]);
+            const [rDate, setRDate] = useState(new Date());
+            const [rCls, setRCls] = useState('');
+
+            const scan = async (e) => {
+                e.preventDefault();
+                const m = members.find(x => x.id === code.toUpperCase());
+                if(m) {
+                    const today = formatDate(new Date());
+                    const exist = att[today] || [];
+                    if(!exist.includes(m.id)) {
+                        await db.collection('attendance_piket').doc(today).set({ list: [...exist, m.id] }, { merge: true });
+                        setRes({st:'ok', m, msg:'Absen Berhasil!'}); showNotif(m.name + ' Hadir');
+                    } else setRes({st:'warn', m, msg:'Sudah Absen Sebelumnya'});
+                } else setRes({st:'err', msg:'Data Tidak Ditemukan!'});
+                setCode('');
+            }
+
+            const wd = Array.from({length:6}, (_,i) => {
+                const d = getMonday(new Date(rDate)); d.setDate(d.getDate()+i); return d;
+            });
+
+            const toggleSel = (id) => sel.includes(id) ? setSel(sel.filter(x=>x!==id)) : setSel([...sel, id]);
+            
+            const saveSch = async () => {
+                const uniq = [...new Set([...schedule[day], ...sel])];
+                await db.collection('settings').doc('piket_schedule').update({ [day]: uniq });
+                setSModal(false); showNotif('Jadwal disimpan');
+            }
+            
+            const removeFromSch = async (d, id) => {
+                await db.collection('settings').doc('piket_schedule').update({ [d]: schedule[d].filter(x=>x!==id) });
+            }
+
+            return (
+                <div className="bg-white h-full flex flex-col rounded-xl shadow-lg overflow-hidden animate-fade-in">
+                    <div className="bg-slate-50 border-b flex px-6 pt-4 gap-2 no-print overflow-x-auto">
+                        <button onClick={()=>setView('dashboard')} className="mr-4 text-slate-500 hover:text-slate-800 transition"><SimpleIcon name="ArrowLeft"/></button>
+                        {[ {id:'scan', l:'Absen', i:'QrCode'}, {id:'report', l:'Laporan', i:'Print'}, {id:'set', l:'Jadwal', i:'Settings'} ].map(t => (
+                            <button key={t.id} onClick={()=>setTab(t.id)} className={`px-4 py-3 rounded-t-lg flex items-center gap-2 font-medium transition ${tab===t.id ? 'bg-white text-orange-600 border-t border-l border-r shadow-sm -mb-[1px]' : 'text-slate-500 hover:bg-slate-100'}`}><SimpleIcon name={t.i} size={16}/> {t.l}</button>
+                        ))}
+                    </div>
+
+                    <div className="p-6 flex-1 overflow-auto">
+                        {tab === 'scan' && (
+                            <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto text-center">
+                                <h2 className="text-2xl font-bold mb-6 text-slate-800">Scan Absensi Piket</h2>
+                                <form onSubmit={scan} className="w-full mb-8 relative">
+                                    <input autoFocus className="w-full text-center text-3xl tracking-widest p-4 border-2 border-slate-300 rounded-xl focus:border-orange-500 outline-none uppercase shadow-inner" value={code} onChange={e=>setCode(e.target.value)} placeholder="SCAN BARCODE..." />
+                                    <p className="text-slate-400 text-sm mt-2">Pastikan kursor aktif di kolom ini</p>
+                                </form>
+                                {res && (
+                                    <div className={`w-full p-6 rounded-xl border-l-8 shadow-md flex items-center text-left transition animate-fade-in ${res.st==='ok'?'bg-green-50 border-green-500':res.st==='warn'?'bg-yellow-50 border-yellow-500':'bg-red-50 border-red-500'}`}>
+                                        <div className="mr-4">{res.st==='ok'?<SimpleIcon name="Check" size={40} className="text-green-600"/>:<SimpleIcon name="XCircle" size={40} className={res.st==='warn'?'text-yellow-600':'text-red-600'}/>}</div>
+                                        <div><h3 className="text-xl font-bold">{res.msg}</h3>{res.m && <p className="text-slate-600">{res.m.name} ({res.m.class})</p>}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {tab === 'report' && (
+                            <div>
+                                <div className="flex flex-wrap justify-between items-center mb-6 gap-4 no-print">
+                                    <div className="flex items-center gap-4 bg-slate-100 p-2 rounded-lg shadow-inner">
+                                        <button onClick={()=>{const d=new Date(rDate); d.setDate(d.getDate()-7); setRDate(d)}} className="p-2 hover:bg-white rounded shadow-sm transition"><SimpleIcon name="ChevronLeft"/></button>
+                                        <span className="font-semibold text-sm">Minggu: {formatDateID(wd[0])}</span>
+                                        <button onClick={()=>{const d=new Date(rDate); d.setDate(d.getDate()+7); setRDate(d)}} className="p-2 hover:bg-white rounded shadow-sm transition"><SimpleIcon name="ChevronRight"/></button>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <select className="border rounded px-3 py-2 bg-white text-sm" value={rCls} onChange={e=>setRCls(e.target.value)}><option value="">Semua Kelas</option>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                                        <button onClick={()=>window.print()} className="bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-slate-800 shadow"><SimpleIcon name="Download" size={16}/> PDF</button>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto border rounded-lg shadow-sm">
+                                    <table className="w-full text-center border-collapse text-sm">
+                                        <thead className="bg-slate-800 text-white">
+                                            <tr><th className="p-3 border w-12">No</th>{wd.map((d,i) => <th key={i} className="p-3 border"><div className="text-xs font-light opacity-75">{['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][i]}</div><div>{d.getDate()}/{d.getMonth()+1}</div></th>)}</tr>
+                                        </thead>
+                                        <tbody>
+                                            {[...Array(10)].map((_, r) => (
+                                                <tr key={r}>
+                                                    <td className="border p-2 bg-slate-50 text-xs font-mono">{r+1}</td>
+                                                    {wd.map((d, c) => {
+                                                        const dn = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][c], ids = schedule[dn] || [];
+                                                        let dm = ids.map(id => members.find(x=>x.id===id)).filter(Boolean);
+                                                        if(rCls) dm = dm.filter(m=>m.class===rCls);
+                                                        const m = sortMembers(dm)[r];
+                                                        if(!m) return <td key={c} className="border"></td>;
+                                                        const isP = att[formatDate(d)]?.includes(m.id), isPast = d < new Date() && !isP && d.toDateString() !== new Date().toDateString();
+                                                        return <td key={c} className={`border p-2 ${isP?'bg-green-100 text-green-800 font-bold border-green-200':isPast?'bg-red-50 text-red-800':''}`}><div className="font-medium">{m.name}</div><div className="text-xs opacity-75">{m.class}</div></td>
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'set' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'].map(d => (
+                                    <div key={d} className="border rounded-xl p-4 bg-slate-50 flex flex-col h-full shadow-sm hover:shadow-md transition">
+                                        <div className="flex justify-between items-center mb-3 border-b pb-2"><h3 className="font-bold text-lg text-slate-700">{d}</h3><span className="bg-white border px-2 py-1 rounded-full text-xs font-bold shadow-sm">{schedule[d].length} Org</span></div>
+                                        <div className="flex-1 overflow-y-auto max-h-60 space-y-2 mb-4 pr-1 custom-scroll">
+                                            {sortMembers(schedule[d].map(id=>members.find(x=>x.id===id)).filter(Boolean)).map(m => (
+                                                <div key={m.id} className="flex justify-between items-center bg-white p-2 rounded border shadow-sm text-sm">
+                                                    <div><span className="font-medium">{m.name}</span> <span className="text-xs text-slate-400">({m.class})</span></div>
+                                                    <button onClick={()=>removeFromSch(d, m.id)} className="text-red-400 hover:text-red-600 transition"><SimpleIcon name="XCircle" size={16}/></button>
+                                                </div>
+                                            ))}
+                                            {schedule[d].length===0 && <p className="text-center text-slate-400 text-sm py-4 italic">Belum ada petugas</p>}
+                                        </div>
+                                        <button onClick={()=>{setDay(d); setSel([]); setSSearch(''); setSModal(true)}} className="w-full py-2 border-2 border-dashed border-slate-300 text-slate-500 hover:border-orange-500 hover:text-orange-500 rounded font-medium flex justify-center items-center gap-2 transition bg-white"><SimpleIcon name="Plus" size={16}/> Tambah</button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {sModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl flex flex-col max-h-[80vh] animate-fade-in">
+                                <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl"><h3 className="font-bold text-lg">Tambah Petugas: {day}</h3><button onClick={()=>setSModal(false)} className="text-slate-400 hover:text-slate-600"><SimpleIcon name="XCircle"/></button></div>
+                                <div className="p-4 border-b"><div className="flex items-center bg-slate-100 border rounded px-3 py-2"><SimpleIcon name="Search" className="text-slate-400 mr-2"/><input autoFocus className="bg-transparent outline-none w-full text-sm" placeholder="Cari nama atau kelas..." value={sSearch} onChange={e=>setSSearch(e.target.value)}/></div></div>
+                                <div className="flex-1 overflow-y-auto p-2">
+                                    {sortMembers(members.filter(m => m.name.toLowerCase().includes(sSearch.toLowerCase()) || m.class.includes(sSearch))).map(m => {
+                                        const ex = schedule[day].includes(m.id), sl = sel.includes(m.id);
+                                        return (
+                                            <div key={m.id} onClick={()=>!ex && toggleSel(m.id)} className={`flex items-center justify-between p-3 border-b cursor-pointer transition ${ex?'bg-slate-100 opacity-50':sl?'bg-orange-50 border-l-4 border-orange-500':''}`}>
+                                                <div><div className="font-bold text-slate-700">{m.name}</div><div className="text-xs text-slate-500">{m.class}</div></div>
+                                                {sl ? <SimpleIcon name="CheckSquare" className="text-orange-500"/> : !ex ? <SimpleIcon name="Square" className="text-slate-300"/> : null}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="p-4 border-t flex justify-end gap-3 bg-slate-50 rounded-b-xl"><span className="self-center text-sm text-slate-500 mr-auto">{sel.length} Dipilih</span><button onClick={()=>setSModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded">Batal</button><button onClick={saveSch} className="px-6 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 shadow font-bold">Simpan</button></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        function EskulSystem({ members, att, setView, showNotif }) {
+            const [tab, setTab] = useState('scan');
+            const [code, setCode] = useState('');
+            const [res, setRes] = useState(null);
+            const [date, setDate] = useState(new Date());
+            const [cls, setCls] = useState('');
+            const [gender, setGender] = useState('');
+            const [gy, setGY] = useState(new Date().getFullYear());
+            const [gms, setGMS] = useState([new Date().getMonth()]);
+
+            const sats = getSaturdays(date.getFullYear(), date.getMonth());
+            const scan = async (e) => {
+                e.preventDefault();
+                const m = members.find(x => x.id === code.toUpperCase());
+                if(m) {
+                    const today = formatDate(new Date());
+                    const exist = att[today] || [];
+                    if(!exist.includes(m.id)) {
+                        await db.collection('attendance_eskul').doc(today).set({ list: [...exist, m.id] }, { merge: true });
+                        setRes({st:'ok', m, msg:'Berhasil Absen'}); showNotif(m.name+' Hadir');
+                    } else setRes({st:'warn', m, msg:'Sudah Absen'});
+                } else setRes({st:'err', msg:'Data Tidak Ditemukan'});
+                setCode('');
+            }
+
+            const getRep = () => {
+                let l = members;
+                if(cls) l = l.filter(m=>m.class===cls);
+                if(gender) l = l.filter(m=>m.gender===gender);
+                return sortMembers(l);
+            }
+
+            const getGrd = (mid) => {
+                if(gms.length===0) return '-';
+                let td=0, ta=0;
+                gms.forEach(mi => { const ds=getSaturdays(gy, mi); td+=ds.length; ds.forEach(d=>{ if(att[formatDate(d)]?.includes(mid)) ta++; }) });
+                return td===0 ? 'A' : (ta/td)>0.7 ? 'A' : 'B';
+            }
+
+            const printPDF = (g) => { setGender(g); setTimeout(()=>{window.print(); setGender('')}, 500); }
+
+            return (
+                <div className="bg-white h-full flex flex-col rounded-xl shadow-lg overflow-hidden animate-fade-in">
+                    <div className="bg-slate-50 border-b flex px-6 pt-4 gap-2 no-print overflow-x-auto">
+                        <button onClick={()=>setView('dashboard')} className="mr-4 text-slate-500 hover:text-slate-800 transition"><SimpleIcon name="ArrowLeft"/></button>
+                        {[ {id:'scan', l:'Absen', i:'QrCode', c:'text-green-600'}, {id:'report', l:'Laporan', i:'Print', c:'text-green-600'}, {id:'grade', l:'Nilai', i:'FileText', c:'text-green-600'} ].map(t => (
+                            <button key={t.id} onClick={()=>setTab(t.id)} className={`px-4 py-3 rounded-t-lg flex items-center gap-2 font-medium transition ${tab===t.id ? `bg-white ${t.c} border-t border-l border-r shadow-sm -mb-[1px]` : 'text-slate-500 hover:bg-slate-100'}`}><SimpleIcon name={t.i} size={16}/> {t.l}</button>
+                        ))}
+                    </div>
+
+                    <div className="p-6 flex-1 overflow-auto">
+                        {tab === 'scan' && (
+                             <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto text-center">
+                                <h2 className="text-2xl font-bold mb-6 text-green-700">Scan Absensi Ekskul</h2>
+                                <form onSubmit={scan} className="w-full mb-8 relative">
+                                    <input autoFocus className="w-full text-center text-3xl tracking-widest p-4 border-2 border-green-200 rounded-xl focus:border-green-600 outline-none uppercase shadow-inner" value={code} onChange={e=>setCode(e.target.value)} placeholder="SCAN BARCODE..." />
+                                </form>
+                                {res && (
+                                    <div className={`w-full p-6 rounded-xl border-l-8 shadow-md flex items-center text-left transition animate-fade-in ${res.st==='ok'?'bg-green-50 border-green-500':res.st==='warn'?'bg-yellow-50 border-yellow-500':'bg-red-50 border-red-500'}`}>
+                                        <div className="mr-4">{res.st==='ok'?<SimpleIcon name="Check" size={40} className="text-green-600"/>:<SimpleIcon name="XCircle" size={40} className="text-red-600"/>}</div>
+                                        <div><h3 className="text-xl font-bold">{res.msg}</h3>{res.m && <p className="text-slate-600">{res.m.name} ({res.m.class})</p>}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {tab === 'report' && (
+                            <div>
+                                <div className="flex flex-wrap justify-between items-center mb-6 gap-4 no-print">
+                                    <div className="flex items-center gap-4 bg-slate-100 p-2 rounded-lg shadow-inner">
+                                        <button onClick={()=>{const d=new Date(date); d.setMonth(d.getMonth()-1); setDate(d)}} className="p-2 hover:bg-white rounded shadow-sm transition"><SimpleIcon name="ChevronLeft"/></button>
+                                        <span className="font-bold text-sm w-32 text-center text-slate-700">{MONTH_NAMES[date.getMonth()]} {date.getFullYear()}</span>
+                                        <button onClick={()=>{const d=new Date(date); d.setMonth(d.getMonth()+1); setDate(d)}} className="p-2 hover:bg-white rounded shadow-sm transition"><SimpleIcon name="ChevronRight"/></button>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <select className="border rounded px-3 py-2 bg-white text-sm" value={cls} onChange={e=>setCls(e.target.value)}><option value="">Semua Kelas</option>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                                        <button onClick={()=>window.print()} className="bg-slate-700 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-slate-800 shadow"><SimpleIcon name="Download" size={16}/> PDF</button>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto border rounded-lg shadow-sm">
+                                    <table className="w-full text-left border-collapse text-sm">
+                                        <thead className="bg-green-700 text-white"><tr><th className="p-3 border text-center">No</th><th className="p-3 border">Nama Anggota</th><th className="p-3 border text-center">Kelas</th>{sats.map(d=><th key={d} className="p-3 border text-center"><div className="text-xs font-light">Sabtu</div>{d.getDate()}/{d.getMonth()+1}</th>)}</tr></thead>
+                                        <tbody className="bg-white divide-y divide-slate-100">{getRep().map((m,i)=>(<tr key={m.id} className="hover:bg-green-50"><td className="p-3 text-center">{i+1}</td><td className="p-3 font-medium">{m.name}</td><td className="p-3 text-center"><span className="bg-slate-100 px-2 py-1 rounded text-xs font-bold">{m.class}</span></td>{sats.map(d=>{const isP=att[formatDate(d)]?.includes(m.id), isPast=d<new Date()&&!isP; return <td key={d} className={`text-center p-3 border-l ${isP?'bg-green-100 font-bold text-green-800':isPast?'bg-red-50 text-red-800':''}`}>{isP?'Hadir':isPast?'Alfa':'-'}</td>})}</tr>))}</tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'grade' && (
+                            <div>
+                                <div className="mb-6 no-print space-y-4">
+                                    <div className="flex justify-between items-center"><h3 className="font-bold text-xl text-slate-800">Daftar Nilai</h3><div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg"><button className="p-1 hover:bg-white rounded shadow-sm" onClick={()=>setGY(gy-1)}><SimpleIcon name="ChevronLeft" size={16}/></button><span className="font-bold px-2">{gy}</span><button className="p-1 hover:bg-white rounded shadow-sm" onClick={()=>setGY(gy+1)}><SimpleIcon name="ChevronRight" size={16}/></button></div></div>
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><div className="text-xs font-bold text-slate-500 uppercase mb-2">Bulan Penilaian:</div><div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">{MONTH_NAMES.map((n,i)=>{const s=gms.includes(i); return <button key={i} onClick={()=>setGMS(s?gms.filter(x=>x!==i):[...gms,i].sort((a,b)=>a-b))} className={`text-sm px-3 py-2 rounded-lg border flex items-center justify-center gap-2 transition ${s?'bg-green-100 border-green-500 text-green-800 font-semibold shadow-sm':'bg-white text-slate-500 hover:bg-white hover:border-slate-300'}`}>{s?<SimpleIcon name="CheckSquare" size={16}/>:<SimpleIcon name="Square" size={16}/>} {n}</button>})}</div></div>
+                                    <div className="flex flex-wrap justify-between items-center gap-4"><select className="border rounded px-3 py-2 bg-white text-sm" value={cls} onChange={e=>setCls(e.target.value)}><option value="">Semua Kelas</option>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select><div className="flex gap-2"><button className="bg-slate-700 text-white px-3 py-2 rounded text-sm hover:bg-slate-800 shadow" onClick={()=>printPDF('')}>Semua</button><button className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 shadow" onClick={()=>printPDF('L')}>Putra</button><button className="bg-pink-600 text-white px-3 py-2 rounded text-sm hover:bg-pink-700 shadow" onClick={()=>printPDF('P')}>Putri</button></div></div>
+                                </div>
+                                <div className="text-center mb-6"><h2 className="text-xl font-bold border-b-2 border-green-500 inline-block pb-1 px-4">PERIODE: {gms.map(i=>MONTH_NAMES[i]).join(', ')} {gy}</h2></div>
+                                <div className="overflow-x-auto rounded-lg border shadow-sm"><table className="w-full text-left border-collapse"><thead className="bg-slate-800 text-white"><tr><th className="p-3 text-center w-16">No</th><th className="p-3">Nama Lengkap</th><th className="p-3 text-center w-24">Kelas</th><th className="p-3 text-center w-24">L/P</th><th className="p-3 text-center w-24">Nilai</th></tr></thead><tbody className="bg-white divide-y divide-slate-100">{getRep().map((m,i)=>{const g=getGrd(m.id); return <tr key={m.id} className="hover:bg-slate-50"><td className="p-3 text-center font-mono text-slate-500">{i+1}</td><td className="p-3 font-medium">{m.name}</td><td className="p-3 text-center">{m.class}</td><td className="p-3 text-center">{m.gender}</td><td className={`p-3 text-center font-bold text-lg ${g==='A'?'text-green-600':g==='B'?'text-orange-500':'text-slate-300'}`}>{g}</td></tr>})}</tbody></table></div>
+                                <div className="mt-4 text-xs text-slate-500 italic text-center no-print">* Nilai A: Kehadiran > 70% | Nilai B: Kehadiran ≤ 70%</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )
+        }
+
+        function SettingsPage({ admins, conf, setView, showNotif }) {
+            const [u, setU] = useState('');
+            const [p, setP] = useState('');
+            const handleLogo = (e) => { const f=e.target.files[0]; if(f){const r=new FileReader(); r.onload=()=>{db.collection('settings').doc('config').update({logoUrl:r.result}); showNotif('Logo Diupdate')}; r.readAsDataURL(f); }}
+            return (
+                <div className="bg-white p-6 rounded-xl shadow-lg h-full flex flex-col animate-fade-in">
+                    <div className="flex items-center gap-2 border-b pb-4 mb-6 no-print">
+                        <button onClick={()=>setView('dashboard')} className="text-slate-500 hover:text-slate-800 transition flex items-center"><SimpleIcon name="ArrowLeft" className="mr-2"/> Kembali</button>
+                        <h2 className="font-bold text-xl ml-2">Pengaturan</h2>
+                    </div>
+                    <div className="flex-1 overflow-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-6">
+                                <h3 className="font-bold text-lg text-orange-600 border-b pb-2">Tampilan Aplikasi</h3>
+                                <div><label className="block text-sm font-medium text-slate-700 mb-2">Nama Aplikasi</label><input className="w-full border p-2 rounded focus:ring-2 focus:ring-orange-500 outline-none" value={conf.appName} onChange={e=>db.collection('settings').doc('config').update({appName:e.target.value})} /></div>
+                                <div><label className="block text-sm font-medium text-slate-700 mb-2">Logo Aplikasi</label><div className="flex items-center gap-4 bg-slate-50 p-4 rounded border">{conf.logoUrl && <img src={conf.logoUrl} className="w-16 h-16 border rounded bg-white object-contain"/>}<input type="file" accept="image/*" onChange={handleLogo} className="text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"/></div></div>
+                            </div>
+                            <div className="space-y-6">
+                                <h3 className="font-bold text-lg text-orange-600 border-b pb-2">Manajemen Admin</h3>
+                                <div className="border rounded-lg overflow-hidden shadow-sm">{admins.map(a=>(<div key={a.id} className="flex justify-between p-4 border-b last:border-0 bg-white items-center"><span className="font-mono text-slate-700">{a.username}</span><button onClick={()=>{if(admins.length>1)db.collection('admins').doc(a.id).delete(); else showNotif('Minimal 1 admin!', 'error')}} className="text-red-400 hover:text-red-600 p-2 rounded hover:bg-red-50 transition"><SimpleIcon name="Trash" size={18}/></button></div>))}</div>
+                                <div className="bg-slate-50 p-6 rounded-lg border shadow-sm"><h4 className="font-bold text-sm mb-4 text-slate-700">Tambah Admin Baru</h4><div className="space-y-3 mb-4"><input className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500 outline-none" placeholder="Username" value={u} onChange={e=>setU(e.target.value)} /><input className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500 outline-none" placeholder="Password" type="password" value={p} onChange={e=>setP(e.target.value)} /></div><button className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded font-bold shadow transition" onClick={()=>{if(u&&p){db.collection('admins').add({username:u, password:p}); setU(''); setP(''); showNotif('Admin ditambahkan')} }}>Tambah Admin</button></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
