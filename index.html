@@ -330,25 +330,108 @@
             }
 
             const downloadCard = async (m) => {
-                const canvas = document.createElement('canvas'); canvas.width = 400; canvas.height = 250;
+                const w = 600, h = 350;
+                const canvas = document.createElement('canvas'); 
+                canvas.width = w; canvas.height = h;
                 const ctx = canvas.getContext('2d');
-                ctx.fillStyle = "white"; ctx.fillRect(0,0,400,250);
-                ctx.fillStyle = "#ea580c"; ctx.fillRect(0,0,400,50);
-                ctx.strokeStyle = "#334155"; ctx.lineWidth = 2; ctx.strokeRect(1,1,398,248);
-                ctx.fillStyle = "white"; ctx.font = "bold 22px Arial"; ctx.textAlign = "center"; ctx.fillText("KARTU PRAMUKA", 200, 32);
-                ctx.fillStyle = "black"; ctx.textAlign = "left"; ctx.font = "bold 18px Arial"; ctx.fillText(m.name, 20, 90);
-                ctx.font = "16px Arial"; ctx.fillText("Kelas: " + m.class, 20, 120); ctx.fillText("ID: " + m.id, 20, 145);
+                
+                // 1. Background & Border
+                ctx.fillStyle = "#ffffff"; 
+                ctx.fillRect(0,0,w,h);
+                
+                // 2. Header Gradient/Solid
+                ctx.fillStyle = "#ea580c"; 
+                ctx.fillRect(0,0,w,90);
+                
+                // Header Text
+                ctx.fillStyle = "white"; 
+                ctx.textAlign = "center";
+                ctx.font = "bold 28px 'Segoe UI', Arial, sans-serif"; 
+                ctx.fillText("KARTU TANDA ANGGOTA", w/2, 45);
+                ctx.font = "18px 'Segoe UI', Arial, sans-serif";
+                ctx.fillText("GERAKAN PRAMUKA", w/2, 70);
+
+                // 3. Footer Accent (Bottom Stripe)
+                ctx.fillStyle = "#334155";
+                ctx.fillRect(0, h-20, w, 20);
+
+                // 4. Member Info (Left Side)
+                ctx.textAlign = "left";
+                ctx.fillStyle = "#334155"; // Slate-700
+                
+                // Labels
+                ctx.font = "14px 'Segoe UI', Arial, sans-serif";
+                ctx.fillStyle = "#64748b"; // Slate-500
+                ctx.fillText("NAMA LENGKAP", 40, 140);
+                
+                // Values
+                ctx.font = "bold 24px 'Segoe UI', Arial, sans-serif";
+                ctx.fillStyle = "#1e293b"; // Slate-800
+                ctx.fillText(m.name.toUpperCase(), 40, 165);
+                
+                // Separator Line
+                ctx.strokeStyle = "#e2e8f0";
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(40, 180); ctx.lineTo(300, 180); ctx.stroke();
+
+                // Class & Gender Row
+                ctx.font = "14px 'Segoe UI', Arial, sans-serif";
+                ctx.fillStyle = "#64748b";
+                ctx.fillText("KELAS", 40, 210);
+                ctx.fillText("JENIS KELAMIN", 180, 210);
+
+                ctx.font = "bold 20px 'Segoe UI', Arial, sans-serif";
+                ctx.fillStyle = "#1e293b";
+                ctx.fillText(m.class, 40, 235);
+                ctx.fillText(m.gender === 'L' ? 'LAKI-LAKI' : 'PEREMPUAN', 180, 235);
+
+                // ID Number
+                ctx.fillStyle = "#ea580c";
+                ctx.font = "bold 16px 'Courier New', monospace";
+                ctx.fillText("ID: " + m.id, 40, 280);
+
+                // 5. QR Code Spotlight (Right Side)
+                // Draw Container Box
+                const qrBoxSize = 200;
+                const qrX = w - qrBoxSize - 40;
+                const qrY = 110;
+                
+                // Shadow for box
+                ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
+                ctx.shadowBlur = 15;
+                ctx.shadowOffsetX = 5;
+                ctx.shadowOffsetY = 5;
+                
+                ctx.fillStyle = "white";
+                ctx.fillRect(qrX, qrY, qrBoxSize, qrBoxSize);
+                
+                // Reset Shadow
+                ctx.shadowColor = "transparent";
+                
+                // Border for QR Box
+                ctx.strokeStyle = "#ea580c";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(qrX, qrY, qrBoxSize, qrBoxSize);
+
+                // QR Code Image
                 try {
                     const img = new Image(); img.crossOrigin = "Anonymous";
-                    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${m.id}`;
+                    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${m.id}&margin=10`;
                     await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-                    ctx.drawImage(img, 250, 80, 130, 130);
+                    // Draw QR inside the white box with padding
+                    ctx.drawImage(img, qrX + 10, qrY + 10, qrBoxSize - 20, qrBoxSize - 20);
                 } catch (e) {
-                    ctx.fillStyle = "#ccc"; ctx.fillRect(250, 80, 130, 130);
-                    ctx.fillStyle = "#000"; ctx.textAlign = "center"; ctx.font = "bold 20px Monospace";
-                    ctx.fillText(m.id, 315, 150); ctx.font = "10px Arial"; ctx.fillText("(Offline)", 315, 165);
+                    // Offline Fallback
+                    ctx.fillStyle = "#f1f5f9"; ctx.fillRect(qrX + 10, qrY + 10, qrBoxSize - 20, qrBoxSize - 20);
+                    ctx.fillStyle = "#334155"; ctx.textAlign = "center"; 
+                    ctx.font = "bold 30px Monospace";
+                    ctx.fillText(m.id, qrX + qrBoxSize/2, qrY + qrBoxSize/2);
+                    ctx.font = "12px Arial"; ctx.fillText("No Internet", qrX + qrBoxSize/2, qrY + qrBoxSize/2 + 20);
                 }
-                const link = document.createElement('a'); link.download = `KARTU_${m.id}.png`; link.href = canvas.toDataURL(); link.click();
+
+                // Download
+                const link = document.createElement('a'); link.download = `KARTU_${m.name.replace(/\s+/g, '_')}_${m.id}.png`;
+                link.href = canvas.toDataURL(); link.click();
             }
 
             const confirmPromote = async (e) => {
