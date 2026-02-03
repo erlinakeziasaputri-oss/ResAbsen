@@ -562,15 +562,32 @@
 
             const downloadPDF = () => {
                 const element = reportRef.current;
+                
+                // Clone untuk memastikan lebar elemen pas di PDF (A4 Landscape ~1122px)
+                const clone = element.cloneNode(true);
+                clone.style.width = '1050px'; 
+                clone.style.fontSize = '12px'; // Perkecil font agar muat banyak
+                
+                // Pastikan tombol-tombol tidak ikut
+                const buttons = clone.querySelectorAll('button');
+                buttons.forEach(b => b.style.display = 'none');
+                
+                // Jika ada libur (div absolut), pastikan tampil statis
+                const absDivs = clone.querySelectorAll('.absolute');
+                absDivs.forEach(div => {
+                    div.style.position = 'static'; 
+                    div.style.display = 'block';
+                    div.style.margin = '2px auto';
+                });
+
                 const opt = {
-                    margin: 0.5, 
+                    margin: [0.5, 0.3], // Top/Bottom 0.5, Left/Right 0.3
                     filename: `Laporan_Piket_${formatDate(rDate)}.pdf`,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-                    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' },
-                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                    html2canvas: { scale: 2, useCORS: true, windowWidth: 1200 },
+                    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
                 };
-                html2pdf().set(opt).from(element).save();
+                html2pdf().set(opt).from(clone).save();
             };
 
             return (
@@ -780,15 +797,32 @@
 
             const downloadPDF = (ref, filename) => {
                 const element = ref.current;
+                
+                // Clone untuk manipulasi PDF tanpa ubah UI
+                const clone = element.cloneNode(true);
+                clone.style.width = '1050px'; 
+                clone.style.fontSize = '12px';
+                
+                // Hide buttons
+                const buttons = clone.querySelectorAll('button');
+                buttons.forEach(b => b.style.display = 'none');
+                
+                // Fix posisi 'Libur'
+                const absDivs = clone.querySelectorAll('.absolute');
+                absDivs.forEach(div => {
+                    div.style.position = 'static'; 
+                    div.style.display = 'block';
+                    div.style.margin = '2px auto';
+                });
+
                 const opt = {
-                    margin: 0.5,
+                    margin: [0.5, 0.3],
                     filename: filename,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-                    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' },
-                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                    html2canvas: { scale: 2, useCORS: true, windowWidth: 1200 },
+                    jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
                 };
-                html2pdf().set(opt).from(element).save();
+                html2pdf().set(opt).from(clone).save();
             };
 
             const printPDF = (g) => { 
